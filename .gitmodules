@@ -1,9 +1,9 @@
 [submodule "scr1"]
 	path = scr1
-	url = https://github.com/syntacore/scr1
+	url = git@github.com:zuki/scr1.git
 [submodule "fpga"]
 	path = fpga
-	url = https://github.com/syntacore/fpga-sdk-prj
+	url = git@github.com:zuki/fpga-sdk-prj.git
 [submodule "sw/sc-bl"]
 	path = sw/sc-bl
 	url = https://github.com/syntacore/sc-bl
