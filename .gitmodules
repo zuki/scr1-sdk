@@ -6,7 +6,7 @@
 	url = git@github.com:zuki/fpga-sdk-prj.git
 [submodule "sw/sc-bl"]
 	path = sw/sc-bl
-	url = https://github.com/syntacore/sc-bl
+	url = git@github.com:zuki/sc-bl.git
 [submodule "sw/zephyr"]
 	path = sw/zephyr
 	url = https://github.com/syntacore/zephyr
