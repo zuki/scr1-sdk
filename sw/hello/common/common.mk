@@ -9,18 +9,18 @@
 dst_dir := $(CURDIR)
 src_root := $(abspath $(COMMON_BASE)/..)/
 
-CROSS_PREFIX ?= $(CROSS_PATH)$(if $(CROSS_PATH),/)riscv64-unknown-elf-
+CROSS_PREFIX ?= $(CROSS_PATH)$(if $(CROSS_PATH),/)riscv32-unknown-elf-
 CC = $(CROSS_PREFIX)gcc
 LD = $(CC)
 OBJDUMP = $(CROSS_PREFIX)objdump
 OBJCOPY = $(CROSS_PREFIX)objcopy
 SIZE = $(CROSS_PREFIX)size
 
-PLATFORM ?= arty_scr1
+PLATFORM ?= max1000_scr1
 
 include $(COMMON_BASE)/$(PLATFORM)/plf.mk
 
-MARCH ?= rv32im
+MARCH ?= rv32i
 MABI  ?= ilp32
 
 MEM ?= tcm
