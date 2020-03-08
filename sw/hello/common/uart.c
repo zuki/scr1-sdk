@@ -1,174 +1,185 @@
 /// Syntacore SCR* infra
 ///
 /// @copyright (C) Syntacore 2015-2017. All rights reserved.
+/// @author mn-sc
 ///
 /// @brief implementation of UART i/o funcs
 
-#ifndef PLF_SYS_CLK
-#error PLF_SYS_CLK
-#endif
-
-#ifndef PLF_UART_BAUDRATE
-#define PLF_UART_BAUDRATE 115200
-#endif
-
-// FPGA UART ports
-#define SC1F_UART0_PORT 0xff010000
-#define PLF_UART0_16550
-
-#ifdef PLF_UART0_16550
-#define SC1F_UART_RXD       (0x00) // receive data
-#define SC1F_UART_TXD       (0x00) // transmit data
-#define SC1F_UART_IER       (0x01) // interrupt enable register
-#define SC1F_UART_FCR       (0x02) // FIFO control register
-#define SC1F_UART_CONTROL   (0x03) // line control register
-#define SC1F_UART_MCR       (0x04) // modem control register
-#define SC1F_UART_STATUS    (0x05) // status register
-#define SC1F_UART_DIV_LO    (0x00) // baud rate divisor register, low
-#define SC1F_UART_DIV_HI    (0x01) // baud rate divisor register, low
-
-// UART FIFO control register bits
-#define SC1F_UART_FCR_RT_1  (0 << 6) // RX FIFO trigger level: 1 byte
-#define SC1F_UART_FCR_RT_4  (1 << 6) // RX FIFO trigger level: 4 bytes
-#define SC1F_UART_FCR_RT_8  (2 << 6) // RX FIFO trigger level: 8 bytes
-#define SC1F_UART_FCR_RT_14 (3 << 6) // RX FIFO trigger level: 14 bytes
-#define SC1F_UART_FCR_RMASK (3 << 6) // RX FIFO trigger level mask bits
-#define SC1F_UART_FCR_T_RST (1 << 2) // reset TX FIFO
-#define SC1F_UART_FCR_R_RST (1 << 1) // reset RX FIFO
-#define SC1F_UART_FCR_EN    (1 << 0) // FIFO enable
-// FCR initial value: enabled
-#define SC1F_UART_FCR_INIT  (SC1F_UART_FCR_RT_1 | SC1F_UART_FCR_EN)
-// UART line control register bits
-#define SC1F_UART_LCR_DIVL  (1 << 7) // divisor latch access
-#define SC1F_UART_LCR_SP    (1 << 5) // sticky parity
-#define SC1F_UART_LCR_EPS   (1 << 4) // even parity select
-#define SC1F_UART_LCR_PE    (1 << 3) // parity enable
-#define SC1F_UART_LCR_SBN   (1 << 2) // number of stop bits (0 - 1, 1 - 1.5/2)
-#define SC1F_UART_LCR_CL8   (3 << 0) // character length: 8
-#define SC1F_UART_LCR_CL7   (2 << 0) // character length: 7
-#define SC1F_UART_LCR_CL6   (1 << 0) // character length: 6
-#define SC1F_UART_LCR_CL5   (0 << 0) // character length: 5
-#define SC1F_UART_LCR_INIT  SC1F_UART_LCR_CL8 // LCR initial value: 8n1
-// UART status register bits
-#define SC1F_UART_ST_TEMPTY (1 << 6) // tx empty
-#define SC1F_UART_ST_TRDY   (1 << 5) // tx not full
-#define SC1F_UART_ST_RRDY   (1 << 0) // rx not empty
-#elif defined(PLF_UART0_SCR_RTL)
-#define SC1F_UART_TXD       (0x00) // transmit data
-#define SC1F_UART_RXD       (0x00) // receive data
-#else // PLF_UART0_16550
-// UART regs
-#define SC1F_UART_RXD       (0x00) // receive data
-#define SC1F_UART_TXD       (0x01) // transmit data
-#define SC1F_UART_STATUS    (0x02) // status register
-#define SC1F_UART_CONTROL   (0x03) // control register
-#define SC1F_UART_BRATE     (0x04) // baud rate divisor register
-
-// UART status register bits
-#define SC1F_UART_ST_TEMPTY (0x20) // tx empty
-#define SC1F_UART_ST_TRDY   (0x40) // tx not full
-#define SC1F_UART_ST_RRDY   (0x80) // rx not empty
-#endif // PLF_UART0_16550
-
-#ifndef PLF_UART0_MMIO
-#define PLF_UART0_MMIO 32
-#endif
-
-#include <stdint.h>
-
-#if PLF_UART0_MMIO == 8
-typedef uint8_t sc1f_uart_port_t;
-#elif PLF_UART0_MMIO == 32
-typedef uint32_t sc1f_uart_port_t;
-#else
-#error Incorrect PLF UART MMIO width
-#endif
-
-
-// uart low level i/o
-static inline void sc1f_uart_write(uintptr_t uart_base, unsigned reg, sc1f_uart_port_t val)
-{
-    ((volatile sc1f_uart_port_t*)uart_base)[reg] = val;
-}
-
-static inline sc1f_uart_port_t sc1f_uart_read(uintptr_t uart_base, unsigned reg)
-{
-    return ((volatile sc1f_uart_port_t*)uart_base)[reg];
-}
-
-// inlines
-
-static inline int sc1f_uart_tx_ready(void)
-{
-    return sc1f_uart_read(SC1F_UART0_PORT, SC1F_UART_STATUS) & SC1F_UART_ST_TRDY;
-}
-
-static inline int sc1f_uart_rx_ready(void)
-{
-    return sc1f_uart_read(SC1F_UART0_PORT, SC1F_UART_STATUS) & SC1F_UART_ST_RRDY;
-}
-static inline void sc1f_uart_put(uint8_t v)
-{
-    while (!sc1f_uart_tx_ready());
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_TXD, v);
-}
-
-static inline int sc1f_uart_getch_nowait(void)
-{
-    if (sc1f_uart_rx_ready())
-        return sc1f_uart_read(SC1F_UART0_PORT, SC1F_UART_RXD);
-    return -1; // no input
-}
+#include "arch.h"
+#include "uart.h"
 
 enum Uart_consts {
     UART_CLK_FREQ = PLF_SYS_CLK,
     UART_BAUD_RATE = PLF_UART_BAUDRATE,
-#ifdef PLF_UART0_16550
-    UART_115200_CLK_DIVISOR = (UART_CLK_FREQ / UART_BAUD_RATE + 7) / 16,
-#else // PLF_UART0_16550
-    UART_115200_CLK_DIVISOR = UART_CLK_FREQ / UART_BAUD_RATE,
-#endif // PLF_UART0_16550
+    UART_CLK_DIVISOR = UART_CLK_FREQ / UART_BAUD_RATE,
 };
 
 // uart init
-void scr_uart_init(void)
+void sc1f_uart_init(void)
 {
-#ifdef PLF_UART0_16550
     // disable interrupts
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_IER, 0);
-    // init MCR
-#ifdef PLF_UART0_16550_MCRX
-    // enable RxD, OUT1=0, OUT2=0
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_MCR, (1 << 6) | (1 << 3) | (1 << 2));
-#else // PLF_UART0_16550_MCRX
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_MCR, 0);
-#endif // PLF_UART0_16550_MCRX
-    // setup baud rate
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_CONTROL, SC1F_UART_LCR_INIT | SC1F_UART_LCR_DIVL);
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_DIV_LO, UART_115200_CLK_DIVISOR & 0xff);
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_DIV_HI, (UART_115200_CLK_DIVISOR >> 8) & 0xff);
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_CONTROL, SC1F_UART_LCR_INIT);
-    // init FIFO
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_FCR, SC1F_UART_FCR_R_RST | SC1F_UART_FCR_T_RST | SC1F_UART_FCR_EN);
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_FCR, SC1F_UART_FCR_INIT);
-#else // PLF_UART0_16550
-    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_BRATE, UART_115200_CLK_DIVISOR);
     sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_CONTROL, 0);
-#endif // PLF_UART0_16550
+    // setup baud rate
+    sc1f_uart_write(SC1F_UART0_PORT, SC1F_UART_DIV, UART_CLK_DIVISOR & 0xffff);
 }
 
-int uart_putchar(int c)
+void uart_print_info(void)
 {
+#ifdef PLF_UART0_BASE
+    uart_puthex(PLF_UART0_BASE);
+#ifdef PLF_UART0_IRQ
+    uart_puts("\tirq ");
+    uart_putdec(PLF_UART0_IRQ);
+#else
+    uart_puts("\t ");
+#endif // PLF_UART0_IRQ
+    uart_puts("\tUART");
+    uart_putc('\n');
+#endif // PLF_UART0_BASE
+}
+
+int sc1f_uart_putchar(int c)
+{
+    if (c == '\n') {
+        sc1f_uart_put('\r');
+    }
     sc1f_uart_put(c);
     return c;
 }
 
-int uart_getch_nowait(void)
+#ifdef putchar
+#undef putchar
+#endif
+
+int putchar(int ch) __attribute__((weak, alias("sc1f_uart_putchar")));
+
+void uart_puts(const char *s)
 {
-    if (sc1f_uart_rx_ready())
-        return sc1f_uart_read(SC1F_UART0_PORT, SC1F_UART_RXD);
-    return -1; // no input
+    while (*s)
+        sc1f_uart_putchar(*s++);
 }
 
-int console_putc(int ch) __attribute__((weak, alias("uart_putchar")));
-int console_getc(void) __attribute__((weak, alias("uart_getch_nowait")));
+void uart_puthex64(uint64_t val)
+{
+    uart_puthex32(val >> 32);
+    uart_puthex32(val);
+}
+
+void uart_puthex32(uint32_t val)
+{
+    uart_puthex16(val >> 16);
+    uart_puthex16(val);
+}
+
+void uart_puthex16(uint16_t val)
+{
+    uart_puthex8(val >> 8);
+    uart_puthex8(val);
+}
+
+void uart_puthex8(uint8_t val)
+{
+    uart_puthex4(val >> 4);
+    uart_puthex4(val);
+}
+
+void uart_puthex4(uint8_t val)
+{
+    uint8_t c = val & 0xf;
+    sc1f_uart_putchar(c + (c > 9 ? ('A' - 10) : '0'));
+}
+
+void uart_putdec(unsigned long v)
+{
+    unsigned long res0 = 0;
+    unsigned long i0 = 0;
+
+    if (!v) {
+        sc1f_uart_putchar('0');
+        return;
+    }
+
+    for (; i0 < 8 && v; ++i0) {
+        res0 = (res0 << 4) | v % 10;
+        v /= 10;
+    }
+
+    if (v) {
+        unsigned long res1 = 0;
+        unsigned long i1 = 0;
+        for (; i1 < 2 && v; ++i1) {
+            res1 = (res1 << 4) | v % 10;
+            v /= 10;
+        }
+        while (i1--) {
+            sc1f_uart_putchar((res1 & 0xf) + '0');
+            res1 >>= 4;
+        }
+    }
+    while (i0--) {
+        sc1f_uart_putchar((res0 & 0xf) + '0');
+        res0 >>= 4;
+    }
+}
+
+unsigned long uart_read_hex(void)
+{
+    unsigned len = 0;
+    unsigned long res = 0;
+    while (1) {
+        int c = uart_getc();
+        if ((c >= '0' && c <= '9') || ((c & ~0x20) >= 'A' && (c & ~0x20) <= 'F')) {
+            if (len >= sizeof(unsigned long) * 2)
+                continue;
+            sc1f_uart_putchar(c);
+            if (c > '9')
+                c = (c & ~0x20) - 'A' + 10;
+            else
+                c = c - '0';
+            ++len;
+            res = (res << 4) + (c & 0xf);
+        } else if (c == 0x7f || c == 0x8) {
+            if (!len)
+                continue;
+            --len;
+            res >>= 4;
+            sc1f_uart_putchar(0x8);
+            sc1f_uart_putchar(' ');
+            sc1f_uart_putchar(0x8);
+        } else if (c == '\r') {
+            sc1f_uart_putchar('\n');
+            break;
+        }
+    }
+
+    return res;
+}
+
+unsigned uart_read_str(char *buf, unsigned size)
+{
+    unsigned len = 0;
+
+    while (1) {
+        int c = uart_getc();
+        if (c > 0x20 && c < 0x7f) {
+            if (len + 1 >= size)
+                continue;
+            sc1f_uart_putchar(c);
+            buf[len++] = c;
+        } else if (c == 0x7f || c == 0x8) {
+            if (!len)
+                continue;
+            --len;
+            sc1f_uart_putchar(0x8);
+            sc1f_uart_putchar(' ');
+            sc1f_uart_putchar(0x8);
+        } else if (c == '\r') {
+            if (size)
+                buf[len] = 0;
+            sc1f_uart_putchar('\n');
+            break;
+        }
+    }
+
+    return len;
+}
